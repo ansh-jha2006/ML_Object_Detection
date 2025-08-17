@@ -6,16 +6,20 @@ import PIL.Image, PIL.ImageFont, PIL.ImageDraw
 import tensorflow as tf
 import tensorflow_datasets as tfds
 #%%
+# Global constants and settings
 im_width = 75
 im_height = 75
 use_normalized_coordinates = True
 #%%
-def draw_bounding_boxes_on_image_array(image, boxes, color=[], thickness=1, display_str_list=()):
-    image_pil = PIL.Image.fromarray(image)
-    rgbimg = PIL.Image.new("RGBA", image_pil.size)
-    rgbimg.paste(image_pil)
-    draw_bounding_boxes_on_image(rgbimg, boxes, color, thickness, display_str_list)
-    return np.array(rgbimg)
+# Helper functions for drawing bounding boxes
+def draw_bounding_box_on_image(image, ymin, xmin, ymax, xmax, color="red", thickness=1, display_string=None, use_normalized_coordinates=True):
+    draw = PIL.ImageDraw.Draw(image)
+    im_width, im_height = image.size
+    if use_normalized_coordinates:
+        (left, right, top, bottom) = (xmin * im_width, xmax * im_width, ymin * im_height, ymax * im_height)
+    else:
+        (left, right, top, bottom) = (xmin, xmax, ymin, ymax)
+    draw.line([(left, top), (left, bottom), (right, bottom), (right, top), (left, top)], width=thickness, fill=color)
 
 def draw_bounding_boxes_on_image(image, boxes, color=[], thickness=1, display_str_list=()):
     boxes_shape = boxes.shape
@@ -24,38 +28,33 @@ def draw_bounding_boxes_on_image(image, boxes, color=[], thickness=1, display_st
     if len(boxes_shape) != 2 or boxes_shape[1] != 4:
         raise ValueError('Input must be of size [N,4]')
     for i in range(boxes_shape[0]):
-        draw_bounding_box_on_image(image, boxes[i, 0], boxes[i, 1], boxes[i, 3], boxes[i, 2], color[i], thickness, display_str_list[i])
+        draw_bounding_box_on_image(image, boxes[i, 0], boxes[i, 1], boxes[i, 3], boxes[i, 2], color[i], thickness, display_string=display_str_list[i])
 
-
-def draw_bounding_box_on_image(image, ymin, xmin, ymax, xmax, color="red", thickness=1,display_str_list= None , use_normalized_coordinates = True):
-    draw = PIL.ImageDraw.Draw(image)
-    im_width, im_height = image.size
-    if use_normalized_coordinates:
-        (left, right, top, bottom) = (xmin * im_width, xmax * im_width, ymin * im_height, ymax * im_height)
-    else:
-        (left, right, top, bottom) = (xmin, xmax, ymin, ymax)
-    draw.line([(left, top), (left, bottom), (right, bottom), (right, top), (left, top)], width=thickness, fill=color)
-    #%%
+def draw_bounding_boxes_on_image_array(image, boxes, color=[], thickness=1, display_str_list=()):
+    image_pil = PIL.Image.fromarray(image)
+    rgbimg = PIL.Image.new("RGBA", image_pil.size)
+    rgbimg.paste(image_pil)
+    draw_bounding_boxes_on_image(rgbimg, boxes, color, thickness, display_str_list)
+    return np.array(rgbimg)
+#%%
+# Utility function for converting datasets to numpy arrays
 def dataset_to_numpy_util(training_dataset, validation_dataset, N):
-    batch_train_ds = training_dataset.unbatch().batch(N)
-
     if tf.executing_eagerly():
-        for validation_digits, (validation_labels, validation_bboxes) in validation_dataset:
+        for validation_digits, (validation_labels, validation_bboxes) in validation_dataset.take(1):
             validation_digits = validation_digits.numpy()
             validation_labels = validation_labels.numpy()
             validation_bboxes = validation_bboxes.numpy()
-            break
-        for training_digits, (training_labels, training_bboxes) in training_dataset:
+        for training_digits, (training_labels, training_bboxes) in training_dataset.take(1):
             training_digits = training_digits.numpy()
             training_labels = training_labels.numpy()
             training_bboxes = training_bboxes.numpy()
-            break
             
     validation_labels = np.argmax(validation_labels, axis=1)
     training_labels = np.argmax(training_labels, axis=1)
     return (training_digits, training_labels, training_bboxes,
             validation_digits, validation_labels, validation_bboxes)
 #%%
+# Helper function for creating digits from local fonts
 MATPLOTLIB_FONT_DIR = os.path.join(os.path.dirname(plt.__file__), "mpl-data/fonts/ttf")
 def create_digits_from_local_fonts(n):
     font_labels = []
@@ -72,6 +71,7 @@ def create_digits_from_local_fonts(n):
     font_digits = np.reshape(np.stack(np.split(np.reshape(font_digits, [75, 75*n]), n, axis=1), axis=0), [n, 75, 75])
     return font_digits, font_labels
 #%%
+# Function for displaying digits with bounding boxes
 def display_digits_with_boxes(digits, predictions, labels, pred_bboxes, bboxes, iou, title):
     n = 10
     indexes = np.random.choice(len(predictions), size=n)
@@ -98,10 +98,9 @@ def display_digits_with_boxes(digits, predictions, labels, pred_bboxes, bboxes, 
     plt.yticks([])
 
     for i in range(n):
-        ax = fig.add_subplot(1, n, i + 1) # Use n instead of 10 for a generic plot size
+        ax = fig.add_subplot(1, n, i + 1)
         bboxes_to_plot = []
         
-        # Check for predictions and ground truths for each image
         if len(pred_bboxes) > 0:
             bboxes_to_plot.append(n_pred_bboxes[i])
             
@@ -124,15 +123,14 @@ def display_digits_with_boxes(digits, predictions, labels, pred_bboxes, bboxes, 
         iou_threshold = 0.5
         if len(iou) > i:
             color = "black"
-            if (n_iou[i] < iou_threshold):
+            if n_iou[i][0] < iou_threshold:
                 color = "red"
-            ax.text(0.2, -0.3, "iou: %s" %(n_iou[i]), color=color, transform=ax.transAxes)
+            ax.text(0.2, -0.3, "iou: %s" %(n_iou[i][0]), color=color, transform=ax.transAxes)
 
-    plt.show() # Added plt.show() to display the plot
+    plt.show()
 #%%
+# TensorFlow dataset functions
 strategy = tf.distribute.get_strategy()
-strategy.num_replicas_in_sync
-#%%
 BATCH_SIZE = 64 * strategy.num_replicas_in_sync
 #%%
 def read_image_tfds(image, label):
@@ -169,11 +167,13 @@ def get_validation_dataset():
         dataset = dataset.repeat()
         return dataset
 #%%
-with strategy.scope():
-  training_dataset = get_training_dataset()
-  validation_dataset = get_validation_dataset()
+# Main execution block
+if __name__ == "__main__":
+    with strategy.scope():
+        training_dataset = get_training_dataset()
+        validation_dataset = get_validation_dataset()
 #%%
-(training_digits, training_labels, training_bboxes,
-  validation_digits, validation_labels, validation_bboxes) = dataset_to_numpy_util(training_dataset, validation_dataset, 10)
+    (training_digits, training_labels, training_bboxes,
+    validation_digits, validation_labels, validation_bboxes) = dataset_to_numpy_util(training_dataset, validation_dataset, 10)
 #%%
-
+    
