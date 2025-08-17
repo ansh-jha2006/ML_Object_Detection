@@ -162,7 +162,7 @@ def get_validation_dataset():
     with strategy.scope():
         dataset = tfds.load("mnist", split="train", as_supervised=True, try_gcs=True)
         dataset = dataset.map(read_image_tfds, num_parallel_calls=16)
-        dataset = dataset.batch(10000, drop_remainder=True)
+        dataset = dataset.batch(BATCH_SIZE, drop_remainder=True)
         dataset = dataset.repeat()
         return dataset
 #%%
@@ -186,10 +186,11 @@ with strategy.scope():
 #%%
 # Compile the model with appropriate losses and metrics
 model.compile(optimizer='adam',
-              loss={'class_output': 'sparse_categorical_crossentropy',
+              loss={'class_output': 'categorical_crossentropy',
                     'box_output': 'mse'},
               metrics={'class_output': 'accuracy',
                        'box_output': 'mse'})
+
 #%%
 # Get training and validation datasets
 training_dataset = get_training_dataset()
@@ -229,3 +230,4 @@ display_digits_with_boxes(
     np.array([]), # IoU calculation is a separate step not included here
     "Validation Results (True vs. Predicted BBoxes)"
 )
+#%%
