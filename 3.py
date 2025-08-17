@@ -28,7 +28,7 @@ def draw_bounding_boxes_on_image(image, boxes, color=[], thickness=1, display_st
     if len(boxes_shape) != 2 or boxes_shape[1] != 4:
         raise ValueError('Input must be of size [N,4]')
     for i in range(boxes_shape[0]):
-        draw_bounding_box_on_image(image, boxes[i, 0], boxes[i, 1], boxes[i, 3], boxes[i, 2], color[i], thickness, display_string=display_str_list[i])
+        draw_bounding_box_on_image(image, boxes[i, 0], boxes[i, 1], boxes[i, 3], boxes[i, 2], color=color[i] if color else 'red', thickness=thickness, display_string=display_str_list[i] if display_str_list else None)
 
 def draw_bounding_boxes_on_image_array(image, boxes, color=[], thickness=1, display_str_list=()):
     image_pil = PIL.Image.fromarray(image)
@@ -126,7 +126,6 @@ def display_digits_with_boxes(digits, predictions, labels, pred_bboxes, bboxes, 
             if n_iou[i][0] < iou_threshold:
                 color = "red"
             ax.text(0.2, -0.3, "iou: %s" %(n_iou[i][0]), color=color, transform=ax.transAxes)
-
     plt.show()
 #%%
 # TensorFlow dataset functions
@@ -167,25 +166,66 @@ def get_validation_dataset():
         dataset = dataset.repeat()
         return dataset
 #%%
-# Main execution block
-# ... (previous code)
+# Model Building, Training, and Visualization
+with strategy.scope():
+    # Define the model architecture
+    input_tensor = tf.keras.layers.Input(shape=(75, 75, 1))
+    x = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')(input_tensor)
+    x = tf.keras.layers.MaxPooling2D((2, 2))(x)
+    x = tf.keras.layers.Conv2D(64, (3, 3), activation='relu')(x)
+    x = tf.keras.layers.MaxPooling2D((2, 2))(x)
+    x = tf.keras.layers.Conv2D(64, (3, 3), activation='relu')(x)
+    x = tf.keras.layers.Flatten()(x)
+    x = tf.keras.layers.Dense(128, activation='relu')(x)
+
+    # Output layers for classification and regression
+    class_output = tf.keras.layers.Dense(10, activation='softmax', name='class_output')(x)
+    box_output = tf.keras.layers.Dense(4, activation='sigmoid', name='box_output')(x)
+
+    model = tf.keras.Model(inputs=input_tensor, outputs=[class_output, box_output])
 #%%
-# Main execution block
-if __name__ == "__main__":
-    with strategy.scope():
-        training_dataset = get_training_dataset()
-        validation_dataset = get_validation_dataset()
+# Compile the model with appropriate losses and metrics
+model.compile(optimizer='adam',
+              loss={'class_output': 'sparse_categorical_crossentropy',
+                    'box_output': 'mse'},
+              metrics={'class_output': 'accuracy',
+                       'box_output': 'mse'})
 #%%
-    (training_digits, training_labels, training_bboxes,
-     validation_digits, validation_labels, validation_bboxes) = dataset_to_numpy_util(training_dataset, validation_dataset, 10)
+# Get training and validation datasets
+training_dataset = get_training_dataset()
+validation_dataset = get_validation_dataset()
 #%%
-    display_digits_with_boxes(
-        training_digits,          # images
-        training_labels,          # predictions (or use model predictions)
-        training_labels,          # true labels
-        np.zeros_like(training_bboxes),  # pred_bboxes (dummy if not available)
-        training_bboxes,          # true bboxes
-        np.zeros((len(training_labels), 1)),  # iou (dummy if not available)
-        "Training Digits & Labels"
-    )
-# %%
+# Train the model
+print("Training the model...")
+model.fit(
+    training_dataset,
+    epochs=5,
+    steps_per_epoch=500,
+    validation_data=validation_dataset,
+    validation_steps=10
+)
+#%%
+# Get validation data for visualization
+print("Getting validation data for visualization...")
+for validation_digits, (validation_labels, validation_bboxes) in validation_dataset.take(1):
+    validation_digits = validation_digits.numpy()
+    validation_labels = np.argmax(validation_labels.numpy(), axis=1)
+    validation_bboxes = validation_bboxes.numpy()
+#%%
+# Generate predictions
+print("Generating predictions...")
+predictions = model.predict(validation_digits)
+predicted_labels = np.argmax(predictions[0], axis=1)
+predicted_bboxes = predictions[1]
+#%%
+# Display results
+print("Displaying results...")
+display_digits_with_boxes(
+    validation_digits,
+    predicted_labels,
+    validation_labels,
+    predicted_bboxes,
+    validation_bboxes,
+    np.array([]), # IoU calculation is a separate step not included here
+    "Validation Results (True vs. Predicted BBoxes)"
+)
