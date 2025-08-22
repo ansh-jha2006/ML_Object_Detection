@@ -170,7 +170,6 @@ def get_validation_dataset():
         dataset = tfds.load("mnist", split="train", as_supervised=True, try_gcs=True)
         dataset = dataset.map(read_image_tfds, num_parallel_calls=16)
         dataset = dataset.batch(BATCH_SIZE, drop_remainder=True)
-        # Fix the caching issue by placing .take() before .cache() and .repeat()
         dataset = dataset.take(100).cache().repeat()
         return dataset
 #%%
@@ -198,7 +197,6 @@ model.compile(optimizer='adam',
                     'box_output': 'mse'},
               metrics={'class_output': 'accuracy',
                        'box_output': 'mse'})
-
 #%%
 # Get training and validation datasets
 training_dataset = get_training_dataset()
@@ -276,18 +274,14 @@ def define_and_compile_model(inputs):
                   metrics={'classification': 'accuracy', 'bounding_box': 'mse'})
     return model
 #%%
-# ... (all your function definitions)
-
-# Re-define and compile the model (using your helper functions)
+# This is the second model architecture. It is defined and compiled here.
 with strategy.scope():
     inputs = tf.keras.layers.Input(shape=(75, 75, 1))
     model = define_and_compile_model(inputs)
 
 model.summary()
-
-# Get training and validation datasets
-training_dataset = get_training_dataset()
-validation_dataset = get_validation_dataset()
+# The rest of the script (Training, Evaluation, etc.) for the second model is below.
+# The code below is a continuation for the second model. It is not a new script.
 #%%
 # Train the model
 print("Training the model...")
@@ -298,7 +292,7 @@ history = model.fit(
     training_dataset,
     steps_per_epoch=steps_per_epoch,
     validation_data=validation_dataset,
-    validation_steps=1,
+    validation_steps=100,
     epochs=EPOCHS
 )
 #%%
@@ -346,4 +340,3 @@ iou_threshold = 0.6
 
 display_digits_with_boxes(validation_digits, predicted_labels, validation_labels,
                           prediction_bboxes, validation_bboxes, iou, "True and Pred values")
-#%%
