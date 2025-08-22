@@ -173,7 +173,7 @@ def get_validation_dataset():
         dataset = dataset.take(100).cache().repeat()
         return dataset
 #%%
-# Model Building, Training, and Visualization
+# Model Building, Training, and Visualization (First Model)
 with strategy.scope():
     # Define the model architecture
     input_tensor = tf.keras.layers.Input(shape=(75, 75, 1))
@@ -209,7 +209,7 @@ model.fit(
     epochs=5,
     steps_per_epoch=500,
     validation_data=validation_dataset,
-    validation_steps=10
+    validation_steps=100
 )
 #%%
 # Get validation data for visualization
@@ -237,6 +237,7 @@ display_digits_with_boxes(
     "Validation Results (True vs. Predicted BBoxes)"
 )
 #%%
+# The second model and its related functions are defined below.
 def feature_extractor(inputs):
     x = tf.keras.layers.Conv2D(16, activation='relu', kernel_size=3, input_shape=(75, 75, 1))(inputs)
     x = tf.keras.layers.AveragePooling2D((2, 2))(x)
@@ -280,8 +281,10 @@ with strategy.scope():
     model = define_and_compile_model(inputs)
 
 model.summary()
-# The rest of the script (Training, Evaluation, etc.) for the second model is below.
-# The code below is a continuation for the second model. It is not a new script.
+
+# Get training and validation datasets
+training_dataset = get_training_dataset()
+validation_dataset = get_validation_dataset()
 #%%
 # Train the model
 print("Training the model...")
