@@ -11,6 +11,8 @@ im_width = 75
 im_height = 75
 use_normalized_coordinates = True
 #%%
+strategy = tf.distribute.get_strategy()
+#%%
 # Helper functions for drawing bounding boxes
 def draw_bounding_box_on_image(image, ymin, xmin, ymax, xmax, color="red", thickness=1, display_string=None, use_normalized_coordinates=True):
     draw = PIL.ImageDraw.Draw(image)
@@ -128,6 +130,11 @@ def display_digits_with_boxes(digits, predictions, labels, pred_bboxes, bboxes, 
             ax.text(0.2, -0.3, "iou: %s" %(n_iou[i][0]), color=color, transform=ax.transAxes)
     plt.show()
 #%%
+def plot_metrics(metric_name, title):
+    plt.title(title)
+    plt.plot(history.history[metric_name], color='blue', label=metric_name)
+    plt.plot(history.history['val_' + metric_name], color='green', label='val_' + metric_name)
+#%%
 # TensorFlow dataset functions
 strategy = tf.distribute.get_strategy()
 BATCH_SIZE = 64 * strategy.num_replicas_in_sync
@@ -230,4 +237,79 @@ display_digits_with_boxes(
     np.array([]), # IoU calculation is a separate step not included here
     "Validation Results (True vs. Predicted BBoxes)"
 )
+#%%
+def feature_extractor(inputs):
+    x = tf.keras.layers.Conv2D(16, activation='relu', kernel_size=3, input_shape=(75, 75, 1))(inputs)
+    x = tf.keras.layers.AveragePooling2D((2, 2))(x)
+    x = tf.keras.layers.Conv2D(32, activation='relu', kernel_size=3)(x)
+    x = tf.keras.layers.AveragePooling2D((2, 2))(x)
+    x = tf.keras.layers.Conv2D(64, activation='relu', kernel_size=3)(x)
+    x = tf.keras.layers.AveragePooling2D((2, 2))(x)
+    return x
+#%%
+def dense_layers(inputs):
+    x = tf.keras.layers.Flatten()(inputs)
+    x = tf.keras.layers.Dense(128, activation='relu')(x)
+    return x
+#%%
+def classifier(inputs):
+    classification_output = tf.keras.layers.Dense(10, activation='softmax', name="classification")(inputs)
+    return classification_output
+#%%
+def bounding_box_regression(inputs):
+    bounding_box_regression_output = tf.keras.layers.Dense(4, name="bounding_box")(inputs)
+    return bounding_box_regression_output
+#%%
+def final_model(inputs):
+    feature_cnn = feature_extractor(inputs)
+    dense_output = dense_layers(feature_cnn)
+    classification_output = classifier(dense_output)
+    bounding_box_output = bounding_box_regression(dense_output)
+    model = tf.keras.Model(inputs=inputs, outputs=[classification_output, bounding_box_output])
+    return model
+#%%
+def define_and_compile_model(inputs):
+    model = final_model(inputs)
+    model.compile(optimizer='adam',
+                  loss={'classification': 'categorical_crossentropy', 'bounding_box': 'mse'},
+                  metrics={'classification': 'accuracy', 'bounding_box': 'mse'})
+    return model
+#%%
+with strategy.scope():
+    inputs = tf.keras.layers.Input(shape=(75, 75, 1))
+    model = define_and_compile_model(inputs)
+
+model.summary()
+#%%
+EPOCHS = 20
+steps_per_epoch = 60000 // BATCH_SIZE
+
+history = model.fit(training_dataset, steps_per_epoch=steps_per_epoch,
+                    validation_data=validation_dataset, validation_steps=1, epochs=EPOCHS)
+
+loss, classification_loss, bounding_box_loss, classification_acc, bounding_box_mse = model.evaluate(validation_dataset, steps=1)
+print("\n------------------------------------------------------\n")
+print("Validation Accuracy:", classification_acc)
+print("\n------------------------------------------------------\n")
+# %%
+def intersection_over_union(pred_box, true_box):
+    xmin_pred, ymin_pred, xmax_pred, ymax_pred = np.split(pred_box, 4, axis=1)
+    xmin_true, ymin_true, xmax_true, ymax_true = np.split(true_box, 4, axis=1)
+
+    smoothing_factor = 1e-10
+
+    xmin_overlap = np.maximum(xmin_pred, xmin_true)
+    xmax_overlap = np.minimum(xmax_pred, xmax_true)
+    ymin_overlap = np.maximum(ymin_pred, ymin_true)
+    ymax_overlap = np.minimum(ymax_pred, ymax_true)
+
+    pred_box_area = (xmax_pred - xmin_pred) * (ymax_pred - ymin_pred)
+    true_box_area = (xmax_true - xmin_true) * (ymax_true - ymin_true)
+
+    overlap_area = np.maximum((xmax_overlap - xmin_overlap), 0) * np.maximum((ymax_overlap - ymin_overlap), 0)
+    union_area = (pred_box_area + true_box_area) - overlap_area
+
+    iou = (overlap_area + smoothing_factor) / (union_area + smoothing_factor)
+
+    return iou
 #%%
