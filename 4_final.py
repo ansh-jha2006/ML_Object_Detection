@@ -343,3 +343,4 @@ iou_threshold = 0.6
 
 display_digits_with_boxes(validation_digits, predicted_labels, validation_labels,
                           prediction_bboxes, validation_bboxes, iou, "True and Pred values")
+# %%
