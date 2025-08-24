@@ -304,9 +304,9 @@ print("\n------------------------------------------------------\n")
 print("Validation Accuracy:", classification_acc)
 print("\n------------------------------------------------------\n")
 #%%
-plot_metrics(history_model1, "bounding_box_mse", "Bounding Box MSE - Model 1")
-plot_metrics(history_model1, "classification_accuracy", "Classification Accuracy - Model 1")
-plot_metrics(history_model1, "classification_loss", "Classification Loss - Model 1")
+plot_metrics(history_model1, "box_output_mse", "Bounding Box MSE - Model 1")
+plot_metrics(history_model1, "class_output_accuracy", "Classification Accuracy - Model 1")
+plot_metrics(history_model1, "class_output_loss", "Classification Loss - Model 1")
 #%%
 plot_metrics(history_model2, "bounding_box_mse", "Bounding Box MSE - Model 2")
 plot_metrics(history_model2, "classification_accuracy", "Classification Accuracy - Model 2")
