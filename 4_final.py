@@ -130,7 +130,7 @@ def display_digits_with_boxes(digits, predictions, labels, pred_bboxes, bboxes, 
             ax.text(0.2, -0.3, "iou: %s" %(n_iou[i][0]), color=color, transform=ax.transAxes)
     plt.show()
 #%%
-def plot_metrics(metric_name, title):
+def plot_metrics(history, metric_name, title):
     plt.title(title)
     plt.plot(history.history[metric_name], color='blue', label=metric_name)
     plt.plot(history.history['val_' + metric_name], color='green', label='val_' + metric_name)
@@ -183,14 +183,14 @@ with strategy.scope():
     x = tf.keras.layers.MaxPooling2D((2, 2))(x)
     x = tf.keras.layers.Conv2D(64, (3, 3), activation='relu')(x)
     x = tf.keras.layers.Flatten()(x)
-    x = tf.keras.layers.Dense(128, activation='relu')(x)
+    x = tf.keras.layers.Dense(64, activation='relu')(x)
 
     # Output layers for classification and regression
     class_output = tf.keras.layers.Dense(10, activation='softmax', name='class_output')(x)
     box_output = tf.keras.layers.Dense(4, activation='sigmoid', name='box_output')(x)
 
     model = tf.keras.Model(inputs=input_tensor, outputs=[class_output, box_output])
-#%%
+#%%Dense
 # Compile the model with appropriate losses and metrics
 model.compile(optimizer='adam',
               loss={'class_output': 'categorical_crossentropy',
@@ -204,7 +204,7 @@ validation_dataset = get_validation_dataset()
 #%%
 # Train the model
 print("Training the model...")
-model.fit(
+history_model1 = model.fit(
     training_dataset,
     epochs=5,
     steps_per_epoch=500,
@@ -249,7 +249,7 @@ def feature_extractor(inputs):
 #%%
 def dense_layers(inputs):
     x = tf.keras.layers.Flatten()(inputs)
-    x = tf.keras.layers.Dense(128, activation='relu')(x)
+    x = tf.keras.layers.Dense(64, activation='relu')(x)
     return x
 #%%
 def classifier(inputs):
@@ -291,7 +291,7 @@ print("Training the model...")
 EPOCHS = 20
 steps_per_epoch = 60000 // BATCH_SIZE
 
-history = model.fit(
+history_model2 = model.fit(
     training_dataset,
     steps_per_epoch=steps_per_epoch,
     validation_data=validation_dataset,
@@ -299,17 +299,18 @@ history = model.fit(
     epochs=EPOCHS
 )
 #%%
-# Evaluate the model
 loss, classification_loss, bounding_box_loss, classification_acc, bounding_box_mse = model.evaluate(validation_dataset, steps=10)
 print("\n------------------------------------------------------\n")
 print("Validation Accuracy:", classification_acc)
 print("\n------------------------------------------------------\n")
 #%%
-plot_metrics("bounding_box_mse", "Bounding Box MSE")
+plot_metrics(history_model1, "bounding_box_mse", "Bounding Box MSE - Model 1")
+plot_metrics(history_model1, "classification_accuracy", "Classification Accuracy - Model 1")
+plot_metrics(history_model1, "classification_loss", "Classification Loss - Model 1")
 #%%
-plot_metrics("classification_accuracy", "Classification Accuracy")
-#%%
-plot_metrics("classification_loss", "Classification loss")
+plot_metrics(history_model2, "bounding_box_mse", "Bounding Box MSE - Model 2")
+plot_metrics(history_model2, "classification_accuracy", "Classification Accuracy - Model 2")
+plot_metrics(history_model2, "classification_loss", "Classification Loss - Model 2")
 # %%
 def intersection_over_union(pred_box, true_box):
     xmin_pred, ymin_pred, xmax_pred, ymax_pred = np.split(pred_box, 4, axis=1)
